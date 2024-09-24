@@ -231,8 +231,11 @@ class Migrate:
         new_models.pop(_aerich, None)
 
         for new_model_str, new_model_describe in new_models.items():
-            model = cls._get_model(new_model_describe["name"].split(".")[-1])
+            print(new_model_describe['name'])
+            print(new_model_describe['name'].split(".")[1])
+            print(new_model_describe["name"].split(".")[-1])
 
+            model = cls._get_model(new_model_describe["name"].split(".")[-1])
             if new_model_str not in old_models:
                 if upgrade:
                     cls._add_operator(cls.add_model(model), upgrade)
