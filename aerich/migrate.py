@@ -54,14 +54,18 @@ class Migrate:
 
     @classmethod
     def get_all_version_files(cls) -> List[str]:
-        return sorted(
-            filter(lambda x: x.endswith("py"), os.listdir(cls.migrate_location)),
-            key=lambda x: int(x.split("_")[0]),
-        )
+        try:
+            return sorted(
+                filter(lambda x: x.endswith("py"), os.listdir(cls.migrate_location)),
+                key=lambda x: int(x.split("_")[0]),
+            )
+        except FileNotFoundError:
+            os.mkdir(cls.migrate_location)
+            return []
 
     @classmethod
     def _get_model(cls, model: str) -> Type[Model]:
-        return Tortoise.apps[cls.app][model]
+        return Tortoise.apps[cls.app].get(model, None)
 
     @classmethod
     async def get_last_version(cls) -> Optional[Aerich]:
@@ -217,7 +221,7 @@ class Migrate:
 
     @classmethod
     def diff_models(
-        cls, old_models: Dict[str, dict], new_models: Dict[str, dict], upgrade=True
+            cls, old_models: Dict[str, dict], new_models: Dict[str, dict], upgrade=True
     ) -> None:
         """
         diff models and add operators
@@ -231,11 +235,10 @@ class Migrate:
         new_models.pop(_aerich, None)
 
         for new_model_str, new_model_describe in new_models.items():
-            print(new_model_describe['name'])
-            print(new_model_describe['name'].split(".")[1])
-            print(new_model_describe["name"].split(".")[-1])
-
             model = cls._get_model(new_model_describe["name"].split(".")[-1])
+            if model is None:
+                continue
+
             if new_model_str not in old_models:
                 if upgrade:
                     cls._add_operator(cls.add_model(model), upgrade)
@@ -340,7 +343,7 @@ class Migrate:
 
                 # add fields or rename fields
                 for new_data_field_name in set(new_data_fields_name).difference(
-                    set(old_data_fields_name)
+                        set(old_data_fields_name)
                 ):
                     new_data_field = cls.get_field_by_name(new_data_field_name, new_data_fields)
                     is_rename = False
@@ -350,22 +353,22 @@ class Migrate:
                         if len(changes) == 2:
                             # rename field
                             if (
-                                changes[0]
-                                == (
+                                    changes[0]
+                                    == (
                                     "change",
                                     "name",
                                     (old_data_field_name, new_data_field_name),
-                                )
-                                and changes[1]
-                                == (
+                            )
+                                    and changes[1]
+                                    == (
                                     "change",
                                     "db_column",
                                     (
-                                        old_data_field.get("db_column"),
-                                        new_data_field.get("db_column"),
+                                            old_data_field.get("db_column"),
+                                            new_data_field.get("db_column"),
                                     ),
-                                )
-                                and old_data_field_name not in new_data_fields_name
+                            )
+                                    and old_data_field_name not in new_data_fields_name
                             ):
                                 if upgrade:
                                     is_rename = click.prompt(
@@ -381,9 +384,9 @@ class Migrate:
                                     cls._rename_old.append(old_data_field_name)
                                     # only MySQL8+ has rename syntax
                                     if (
-                                        cls.dialect == "mysql"
-                                        and cls._db_version
-                                        and cls._db_version.startswith("5.")
+                                            cls.dialect == "mysql"
+                                            and cls._db_version
+                                            and cls._db_version.startswith("5.")
                                     ):
                                         cls._add_operator(
                                             cls._change_field(
@@ -414,11 +417,11 @@ class Migrate:
                             )
                 # remove fields
                 for old_data_field_name in set(old_data_fields_name).difference(
-                    set(new_data_fields_name)
+                        set(new_data_fields_name)
                 ):
                     # don't remove field if is renamed
                     if (upgrade and old_data_field_name in cls._rename_old) or (
-                        not upgrade and old_data_field_name in cls._rename_new
+                            not upgrade and old_data_field_name in cls._rename_new
                     ):
                         continue
                     old_data_field = cls.get_field_by_name(old_data_field_name, old_data_fields)
@@ -442,7 +445,7 @@ class Migrate:
 
                 # add fk
                 for new_fk_field_name in set(new_fk_fields_name).difference(
-                    set(old_fk_fields_name)
+                        set(old_fk_fields_name)
                 ):
                     fk_field = cls.get_field_by_name(new_fk_field_name, new_fk_fields)
                     if fk_field.get("db_constraint"):
@@ -454,7 +457,7 @@ class Migrate:
                         )
                 # drop fk
                 for old_fk_field_name in set(old_fk_fields_name).difference(
-                    set(new_fk_fields_name)
+                        set(new_fk_fields_name)
                 ):
                     old_fk_field = cls.get_field_by_name(
                         old_fk_field_name, cast(List[dict], old_fk_fields)
@@ -497,7 +500,7 @@ class Migrate:
                                 continue
                         elif option == "default":
                             if not (
-                                is_default_function(old_new[0]) or is_default_function(old_new[1])
+                                    is_default_function(old_new[0]) or is_default_function(old_new[1])
                             ):
                                 # change column default
                                 cls._add_operator(
@@ -539,7 +542,7 @@ class Migrate:
 
     @classmethod
     def create_m2m(
-        cls, model: Type[Model], field_describe: dict, reference_table_describe: dict
+            cls, model: Type[Model], field_describe: dict, reference_table_describe: dict
     ) -> str:
         return cls.ddl.create_m2m(model, field_describe, reference_table_describe)
 
@@ -562,7 +565,7 @@ class Migrate:
 
     @classmethod
     def _drop_index(
-        cls, model: Type[Model], fields_name: Union[Iterable[str], Index], unique=False
+            cls, model: Type[Model], fields_name: Union[Iterable[str], Index], unique=False
     ) -> str:
         if isinstance(fields_name, Index):
             return cls.ddl.drop_index_by_name(
@@ -573,7 +576,7 @@ class Migrate:
 
     @classmethod
     def _add_index(
-        cls, model: Type[Model], fields_name: Union[Iterable[str], Index], unique=False
+            cls, model: Type[Model], fields_name: Union[Iterable[str], Index], unique=False
     ) -> str:
         if isinstance(fields_name, Index):
             return fields_name.get_sql(cls.ddl.schema_generator, model, False)
@@ -602,7 +605,7 @@ class Migrate:
 
     @classmethod
     def _drop_fk(
-        cls, model: Type[Model], field_describe: dict, reference_table_describe: dict
+            cls, model: Type[Model], field_describe: dict, reference_table_describe: dict
     ) -> str:
         return cls.ddl.drop_fk(model, field_describe, reference_table_describe)
 
@@ -616,7 +619,7 @@ class Migrate:
 
     @classmethod
     def _change_field(
-        cls, model: Type[Model], old_field_describe: dict, new_field_describe: dict
+            cls, model: Type[Model], old_field_describe: dict, new_field_describe: dict
     ) -> str:
         db_field_types = cast(dict, new_field_describe.get("db_field_types"))
         return cls.ddl.change_column(
@@ -628,7 +631,7 @@ class Migrate:
 
     @classmethod
     def _add_fk(
-        cls, model: Type[Model], field_describe: dict, reference_table_describe: dict
+            cls, model: Type[Model], field_describe: dict, reference_table_describe: dict
     ) -> str:
         """
         add fk
